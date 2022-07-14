@@ -1,0 +1,6 @@
+.yarn
+node_modules
+coverage
+/*.js
+!/index.js
+*.tgz
