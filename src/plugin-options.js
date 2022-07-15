@@ -4,7 +4,7 @@ const defaultOptions = {
   path: null,
   copyToSrcPath: false,
   skipImageCreation: false,
-}
+};
 
 function pluginOptionsSchema({ Joi }) {
   return Joi.object({
@@ -25,18 +25,24 @@ function pluginOptionsSchema({ Joi }) {
     skipImageCreation: Joi.boolean().description(
       `Only create nodes, don't download files (default: ${defaultOptions.skipImageCreation})`
     ),
-  })
+  });
 }
 
-module.exports.pluginOptionsSchema = pluginOptionsSchema
+module.exports.pluginOptionsSchema = pluginOptionsSchema;
 
 function getOptions(pluginOptions) {
   const options = {
     ...defaultOptions,
     ...pluginOptions,
+  };
+
+  if (options.copyToSrcPath === true && options.skipImageCreation === true) {
+    throw Error(
+      `option: copyToSrcPath with value 'true' will have no effect with skipImageCreation with value 'true'`
+    );
   }
 
-  return options
+  return options;
 }
 
-module.exports.getOptions = getOptions
+module.exports.getOptions = getOptions;

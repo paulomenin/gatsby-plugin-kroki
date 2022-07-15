@@ -1,17 +1,17 @@
-const path = require(`path`)
-const fs = require(`fs`)
-const pako = require("pako")
-const matter = require(`gray-matter`)
-const { createRemoteFileNode } = require(`gatsby-source-filesystem`)
-const { getOptions } = require("./plugin-options")
+const path = require(`path`);
+const fs = require(`fs`);
+const pako = require("pako");
+const matter = require(`gray-matter`);
+const { createRemoteFileNode } = require(`gatsby-source-filesystem`);
+const { getOptions } = require("./plugin-options");
 
-const KROKI_NODE_TYPE = "Kroki"
+const KROKI_NODE_TYPE = "Kroki";
 
 function unstable_shouldOnCreateNode({ node }) {
-  return node.internal.type === `File` && ["kroki"].includes(node.extension)
+  return node.internal.type === `File` && ["kroki"].includes(node.extension);
 }
 
-module.exports.unstable_shouldOnCreateNode = unstable_shouldOnCreateNode
+module.exports.unstable_shouldOnCreateNode = unstable_shouldOnCreateNode;
 
 async function onCreateNode(api, pluginOptions) {
   const {
@@ -21,46 +21,48 @@ async function onCreateNode(api, pluginOptions) {
     createNodeId,
     createContentDigest,
     reporter,
-  } = api
+  } = api;
 
-  const options = getOptions(pluginOptions)
+  const options = getOptions(pluginOptions);
 
   if (!unstable_shouldOnCreateNode({ node: node })) {
-    return
+    return;
   }
 
   if (options.path !== null) {
-    const normalizedPath = path.join(
-      ...path.normalize(options.path).split(path.sep)
-    )
-    const normalizedNodePath = path.normalize(node.absolutePath)
+    const relativePath = path.relative(options.path, node.absolutePath);
 
-    if (!normalizedNodePath.startsWith(normalizedPath)) {
-      return
+    const isSubPath =
+      relativePath &&
+      !relativePath.startsWith("..") &&
+      !path.isAbsolute(relativePath);
+
+    if (!isSubPath) {
+      return;
     }
   }
 
-  const content = await loadNodeContent(node)
-
   try {
-    const file = matter(content)
+    const content = await loadNodeContent(node);
+
+    const file = matter(content);
 
     if (file.isEmpty) {
-      throw new Error("Missing frontmatter")
+      throw new Error("Empty file");
     }
 
-    if (!file.data.hasOwnProperty("diagramType")) {
-      throw new Error("Missing frontmatter 'diagramType' field")
+    if (!Object.prototype.hasOwnProperty.call(file.data, "diagramType")) {
+      throw new Error("Missing frontmatter 'diagramType' field");
     }
 
-    const diagramType = file.data.diagramType
+    const diagramType = file.data.diagramType;
     const diagramOutput = file.data.outputFormat
       ? file.data.outputFormat
-      : options.defaultOutputFormat
+      : options.defaultOutputFormat;
 
-    const encodedContent = encodeContentForKrokiGetRequest(file.content)
+    const encodedContent = encodeContentForKrokiGetRequest(file.content);
 
-    const krokiURL = `${options.krokiEndpoint}/${diagramType}/${diagramOutput}/${encodedContent}`
+    const krokiURL = `${options.krokiEndpoint}/${diagramType}/${diagramOutput}/${encodedContent}`;
 
     const krokiNode = {
       id: createNodeId(`${node.id} >>> ${KROKI_NODE_TYPE}`),
@@ -78,13 +80,10 @@ async function onCreateNode(api, pluginOptions) {
       frontmatter: {
         ...file.data,
       },
-    }
+    };
 
-    if (node.internal.type === `File`) {
-      krokiNode.fileAbsolutePath = node.absolutePath
-    }
-
-    krokiNode.internal.contentDigest = createContentDigest(krokiNode)
+    krokiNode.fileAbsolutePath = node.absolutePath;
+    krokiNode.internal.contentDigest = createContentDigest(krokiNode);
 
     if (!options.skipImageCreation) {
       const fileNode = await downloadDiagramFile({
@@ -92,52 +91,47 @@ async function onCreateNode(api, pluginOptions) {
         pluginOptions: pluginOptions,
         krokiNode: krokiNode,
         fileNode: node,
-      })
+      });
 
       if (options.copyToSrcPath) {
-        const filename = path.basename(fileNode.absolutePath)
-        const destinationDir = path.dirname(krokiNode.fileAbsolutePath)
-        const destinationPath = path.join(destinationDir, filename)
-        fs.copyFileSync(fileNode.absolutePath, destinationPath)
+        const filename = path.basename(fileNode.absolutePath);
+        const destinationDir = path.dirname(krokiNode.fileAbsolutePath);
+        const destinationPath = path.join(destinationDir, filename);
+        fs.copyFileSync(fileNode.absolutePath, destinationPath);
       }
     }
 
-    createNode(krokiNode)
-    createParentChildLink({ parent: node, child: krokiNode })
+    createNode(krokiNode);
+    createParentChildLink({ parent: node, child: krokiNode });
 
-    return krokiNode
+    return krokiNode;
   } catch (err) {
     reporter.panicOnBuild(
       `Error processing ${KROKI_NODE_TYPE} ${
         node.absolutePath ? `file ${node.absolutePath}` : `in node ${node.id}`
       }:\n
       ${err.message}`
-    )
+    );
   }
 }
 
 function encodeContentForKrokiGetRequest(content) {
-  const data = Buffer.from(content, "utf8")
-  const compressed = pako.deflate(data, { level: 9 })
+  const data = Buffer.from(content, "utf8");
+  const compressed = pako.deflate(data, { level: 9 });
   const result = Buffer.from(compressed)
     .toString("base64")
     .replace(/\+/g, "-")
-    .replace(/\//g, "_")
+    .replace(/\//g, "_");
 
-  return result
+  return result;
 }
 
-async function downloadDiagramFile({
-  api,
-  pluginOptions,
-  fileNode,
-  krokiNode,
-}) {
+async function downloadDiagramFile({ api, fileNode, krokiNode }) {
   const {
     getCache,
-    actions: { createNode },
+    actions: { createNode, createParentChildLink },
     createNodeId,
-  } = api
+  } = api;
 
   const imageNode = await createRemoteFileNode({
     url: krokiNode.krokiURL,
@@ -147,13 +141,16 @@ async function downloadDiagramFile({
     createNodeId,
     name: `${fileNode.name}`,
     ext: `.${krokiNode.diagramOutputFormat}`,
-  })
+  });
 
   if (imageNode) {
-    krokiNode.localFile___NODE = imageNode.id
+    createParentChildLink({
+      parent: krokiNode,
+      child: imageNode,
+    });
   }
 
-  return imageNode
+  return imageNode;
 }
 
-module.exports.onCreateNode = onCreateNode
+module.exports.onCreateNode = onCreateNode;

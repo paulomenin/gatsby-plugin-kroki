@@ -1,24 +1,24 @@
 const typeDefs = `
       type Kroki implements Node {
-          frontmatter: KrokiFrontmatter
+          frontmatter: KrokiFrontmatter!
           diagramContent: String
-          diagramOutputFormat: String
-          diagramType: String
+          diagramOutputFormat: String!
+          diagramType: String!
           encodedContent: String
           krokiURL: String
           fileAbsolutePath: String
       }
 
       type KrokiFrontmatter {
-          diagramType: String
+          diagramType: String!
           outputFormat: String
       }
-  `
+  `;
 
 function createSchemaCustomization({ actions: { createTypes } }) {
-  createTypes(typeDefs)
+  createTypes(typeDefs);
 }
 
-module.exports = createSchemaCustomization
+module.exports = createSchemaCustomization;
 
-module.exports.typeDefs = typeDefs
+module.exports.typeDefs = typeDefs;
